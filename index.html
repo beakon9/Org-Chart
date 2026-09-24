@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Org Tree Builder</title>
+<style>
+:root{--ink:#172033;--muted:#657089;--line:#d9dfeb;--bg:#f5f7fb;--card:#fff;--accent:#315ee8;--soft:#edf1ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:#fff;border-bottom:1px solid var(--line);padding:22px max(20px,calc((100vw - 1200px)/2));display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+h1{font-size:23px;margin:0}p{color:var(--muted);margin:5px 0 0;font-size:13px}
+main{max-width:1200px;margin:24px auto;padding:0 18px;display:grid;gap:18px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:18px;box-shadow:0 4px 18px #16264a08}
+h2{font-size:16px;margin:0 0 14px}.formgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+label{font-size:12px;color:var(--muted);display:grid;gap:6px}input,select,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);font:inherit}
+button,.button{border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 14px;border-radius:9px;font-weight:650;cursor:pointer;font-size:13px}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button:hover{filter:brightness(.97)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.tree{overflow:auto;padding:25px 12px 35px;min-height:160px}.tree-row{display:flex;justify-content:center;align-items:flex-start;gap:24px;width:max-content;min-width:100%}
+.branch{display:flex;flex-direction:column;align-items:center;min-width:max-content}.node{width:205px;background:#fff;border:1px solid var(--line);border-top:4px solid var(--accent);border-radius:12px;padding:14px;box-shadow:0 5px 16px #1c2b4b0b}
+.node{cursor:grab}.node:active{cursor:grabbing}.node.dragging{opacity:.45}.node.drop-target{outline:3px dashed var(--accent);outline-offset:3px}.tree.drop-root-target{background:var(--soft);outline:2px dashed var(--accent);outline-offset:-6px;border-radius:12px}.node.employee{border-top-color:#8a96aa}.avatar{width:58px;height:58px;object-fit:cover;border-radius:50%;display:block;margin:0 0 10px;border:2px solid var(--line)}.name{font-weight:750;overflow-wrap:anywhere}.role{font-size:12px;color:var(--muted);margin-top:4px}.team{display:inline-block;background:var(--soft);color:#304bb1;border-radius:20px;padding:4px 8px;font-size:11px;margin-top:9px}
+.node-actions{display:flex;gap:5px;flex-wrap:wrap;margin-top:12px}.node-actions button{font-size:11px;padding:6px 8px}
+.connector{height:22px;border-left:1px solid #b7c0d0}.children{display:flex;gap:14px;align-items:flex-start;position:relative;padding-top:24px}.children:before{content:"";position:absolute;top:0;left:50%;height:12px;border-left:1px solid #b7c0d0}
+.children:after{content:"";position:absolute;top:0;left:var(--left,50%);right:var(--right,50%);border-top:1px solid #b7c0d0}
+.empty{text-align:center;padding:40px 10px;color:var(--muted)}.stats{font-size:13px;color:var(--muted)}.notice{font-size:12px;color:var(--muted);margin-top:10px}
+textarea{min-height:100px;font:12px ui-monospace,monospace}.hidden{display:none!important}
+@media(max-width:800px){.formgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.formgrid{grid-template-columns:1fr}header{padding:18px}}
+@media print{body{background:#fff}header .actions,.editor,.toolbar button,.node-actions,.import-panel{display:none!important}.panel{box-shadow:none;border:0}.tree{overflow:visible}.node{break-inside:avoid}}
+</style>
+</head>
+<body>
+<header><div><h1>Org Tree Builder</h1><p>Build and visualize your team's reporting structure.</p></div><div class="actions" style="margin:0"><button id="print">Print / Save PDF</button><button id="export" class="primary">Export JSON</button></div></header>
+<main>
+<section class="panel editor">
+<h2 id="formtitle">Add a person</h2>
+<div class="formgrid">
+<label>Full name<input id="name" placeholder="e.g. Abhishek Pattnaik"></label>
+<label>Designation<input id="role" placeholder="e.g. Pod Manager"></label>
+<label>Reports to<select id="parent"><option value="">No parent (top level)</option></select></label>
+<label>Team / department<input id="team" placeholder="e.g. Lily Pod"></label>
+<label>Profile photo<input id="photo" type="file" accept="image/*"></label>
+</div>
+<div class="actions"><button class="primary" id="save">+ Add person</button><button id="cancel" class="hidden">Cancel edit</button><span id="msg" class="notice" role="status"></span></div>
+</section>
+<section class="panel">
+<div class="toolbar"><div><h2 style="margin:0 0 5px">Reporting tree</h2><div id="stats" class="stats">0 people</div></div><div class="actions" style="margin:0"><button id="expand">Expand all</button><button id="collapse">Collapse all</button><button id="clear">Clear chart</button></div></div>
+<div id="tree" class="tree"><div class="empty">Add your first person above to start building your org chart.</div></div>
+</section>
+<section class="panel import-panel">
+<h2>Import or restore a chart</h2><p>Paste a JSON array exported from this tool, or upload a JSON file.</p>
+<textarea id="json" placeholder='[{"id":"1","name":"CEO","role":"CEO","parentId":null,"team":""}]'></textarea>
+<div class="actions"><button id="import" class="primary">Import JSON</button><label style="display:inline-flex;align-items:center;grid-template-columns:auto 1fr">Upload JSON file <input type="file" id="file" accept=".json,application/json"></label></div>
+<p class="notice">Your chart is saved in this browser only. Export JSON to back it up or share the structure with another person. Changes made by different people do not sync automatically.</p>
+</section>
+</main>
+<script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);let people=[],editing=null,collapsed=new Set(),seq=1,currentPhoto='';
+try{people=JSON.parse(localStorage.getItem('orgtree-data')||'[]');seq=Math.max(0,...people.map(p=>parseInt(p.id)||0))+1}catch(e){people=[]}
+const descendants=id=>{let a=[];people.filter(p=>p.parentId===id).forEach(p=>a.push(p.id,...descendants(p.id)));return a};
+const person=id=>people.find(p=>p.id===id);
+function say(s){$('msg').textContent=s}
+function reset(){editing=null;currentPhoto='';$('photo').value='';$('name').value='';$('role').value='';$('team').value='';$('parent').value='';$('save').textContent='+ Add person';$('formtitle').textContent='Add a person';$('cancel').classList.add('hidden')}
+function parents(){let old=$('parent').value;$('parent').replaceChildren(new Option('No parent (top level)',''));people.filter(p=>p.id!==editing&&(!editing||!descendants(editing).includes(p.id))).forEach(p=>$('parent').add(new Option(p.name+' · '+(p.role||'Team member'),p.id)));if([...$('parent').options].some(o=>o.value===old))$('parent').value=old}
+function node(p){let b=document.createElement('div');b.className='branch';let c=document.createElement('div');c.className='node '+(people.some(x=>x.parentId===p.id)?'':'employee');c.draggable=true;c.dataset.personId=p.id;
+c.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',p.id);e.dataTransfer.effectAllowed='move';c.classList.add('dragging')});
+c.addEventListener('dragend',()=>{c.classList.remove('dragging');document.querySelectorAll('.drop-target,.drop-root-target').forEach(el=>el.classList.remove('drop-target','drop-root-target'))});
+c.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';c.classList.add('drop-target')});
+c.addEventListener('dragleave',e=>{if(!c.contains(e.relatedTarget))c.classList.remove('drop-target')});
+c.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();c.classList.remove('drop-target');const draggedId=e.dataTransfer.getData('text/plain');if(!draggedId||draggedId===p.id)return;const dragged=person(draggedId);if(!dragged)return;if(descendants(draggedId).includes(p.id)){say('Cannot move a person under their own descendant.');return}dragged.parentId=p.id;collapsed.delete(p.id);render();say('Moved '+dragged.name+' under '+p.name+'.')});if(p.photo){let img=document.createElement('img');img.className='avatar';img.src=p.photo;img.alt=p.name+' profile photo';c.append(img)}let n=document.createElement('div');n.className='name';n.textContent=p.name;c.append(n);let r=document.createElement('div');r.className='role';r.textContent=p.role||'Team member';c.append(r);if(p.team){let t=document.createElement('span');t.className='team';t.textContent=p.team;c.append(t)}
+let acts=document.createElement('div');acts.className='node-actions';
+function btn(label,fn){let x=document.createElement('button');x.textContent=label;x.onclick=fn;acts.append(x)}
+btn('+ Report',()=>{$('parent').value=p.id;$('name').focus();say('New person will report to '+p.name)});
+btn('Edit',()=>{editing=p.id;$('name').value=p.name;$('role').value=p.role||'';$('team').value=p.team||'';currentPhoto=p.photo||'';$('photo').value='';parents();$('parent').value=p.parentId||'';$('save').textContent='Save changes';$('formtitle').textContent='Edit person';$('cancel').classList.remove('hidden');$('name').focus()});
+btn(collapsed.has(p.id)?'Show team':'Hide team',()=>{if(collapsed.has(p.id))collapsed.delete(p.id);else collapsed.add(p.id);render()});
+btn('Delete',()=>{let ids=[p.id,...descendants(p.id)];if(confirm('Delete '+p.name+' and '+(ids.length-1)+' reporting descendants?')){people=people.filter(x=>!ids.includes(x.id));ids.forEach(x=>collapsed.delete(x));if(ids.includes(editing))reset();render()}});
+c.append(acts);b.append(c);let kids=people.filter(x=>x.parentId===p.id);
+if(kids.length&&!collapsed.has(p.id)){let line=document.createElement('div');line.className='connector';b.append(line);let row=document.createElement('div');row.className='children';row.style.setProperty('--left',kids.length===1?'50%':'0');row.style.setProperty('--right',kids.length===1?'50%':'0');kids.forEach(k=>row.append(node(k)));b.append(row)}return b}
+function render(){parents();$('tree').replaceChildren();
+$('tree').ondragover=e=>{if(e.target===$('tree')||e.target.classList.contains('tree-row')){e.preventDefault();e.dataTransfer.dropEffect='move';$('tree').classList.add('drop-root-target')}};
+$('tree').ondragleave=e=>{if(! $('tree').contains(e.relatedTarget))$('tree').classList.remove('drop-root-target')};
+$('tree').ondrop=e=>{if(e.target===$('tree')||e.target.classList.contains('tree-row')){e.preventDefault();$('tree').classList.remove('drop-root-target');const draggedId=e.dataTransfer.getData('text/plain');const dragged=person(draggedId);if(dragged){dragged.parentId=null;render();say('Moved '+dragged.name+' to top level.')}}};let roots=people.filter(p=>!p.parentId||!person(p.parentId));if(!roots.length){let e=document.createElement('div');e.className='empty';e.textContent='Add your first person above to start building your org chart.';$('tree').append(e)}else{let row=document.createElement('div');row.className='tree-row';roots.forEach(p=>row.append(node(p)));$('tree').append(row)}
+$('stats').textContent=people.length+' people · '+people.filter(p=>people.some(x=>x.parentId===p.id)).length+' managers';try{localStorage.setItem('orgtree-data',JSON.stringify(people))}catch(e){}}
+$('save').onclick=()=>{let name=$('name').value.trim(),role=$('role').value.trim(),team=$('team').value.trim(),parentId=$('parent').value||null;if(!name){say('Please enter a name.');return}if(editing&&(parentId===editing||descendants(editing).includes(parentId))){say('Cannot report to yourself or your own descendant.');return}if(editing){Object.assign(person(editing),{name,role,team,parentId,photo:currentPhoto})}else people.push({id:String(seq++),name,role,team,parentId,photo:currentPhoto});reset();render();say('Saved.')};
+$('photo').onchange=e=>{const file=e.target.files&&e.target.files[0];if(!file)return;if(!file.type.startsWith('image/')){say('Please choose an image file.');e.target.value='';return}if(file.size>2*1024*1024){say('Please choose an image smaller than 2 MB.');e.target.value='';return}const reader=new FileReader();reader.onload=()=>{currentPhoto=reader.result;say('Photo selected. It will be saved with this person.')};reader.onerror=()=>say('Could not read that image. Please try another.');reader.readAsDataURL(file)};
+$('cancel').onclick=reset;$('expand').onclick=()=>{collapsed.clear();render()};$('collapse').onclick=()=>{people.filter(p=>people.some(x=>x.parentId===p.id)).forEach(p=>collapsed.add(p.id));render()};
+$('clear').onclick=()=>{if(confirm('Clear the entire chart?')){people=[];seq=1;collapsed.clear();reset();render()}};
+$('export').onclick=()=>{let a=document.createElement('a'),u=URL.createObjectURL(new Blob([JSON.stringify(people,null,2)],{type:'application/json'}));a.href=u;a.download='org-chart.json';a.click();URL.revokeObjectURL(u)};
+function importData(data){if(!Array.isArray(data)||data.some(p=>!p.name||p.id==null))throw Error('Expected an array of people with id and name.');let ids=new Set(data.map(p=>String(p.id)));if(data.some(p=>p.parentId&&!ids.has(String(p.parentId))))throw Error('A parentId does not match an existing person id.');people=data.map(p=>({...p,id:String(p.id),parentId:p.parentId?String(p.parentId):null}));seq=Math.max(0,...people.map(p=>parseInt(p.id)||0))+1;collapsed.clear();reset();render();say('Imported '+people.length+' people.')};
+$('import').onclick=()=>{try{importData(JSON.parse($('json').value))}catch(e){say('Import failed: '+e.message)}};
+$('file').onchange=async e=>{try{importData(JSON.parse(await e.target.files[0].text()))}catch(err){say('File import failed: '+err.message)}};
+$('print').onclick=()=>window.print();render();
+})();
+</script>
+</body></html>
